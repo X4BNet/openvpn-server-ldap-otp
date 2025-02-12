@@ -2,7 +2,7 @@ FROM ubuntu:24.04
 
 MAINTAINER Brian Lycett <brian@wheelybird.com>
 
-RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates wget curl gnupg && \
+RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates wget curl gnupg libnss-ldapd iproute2 tcpdump  && \
     DEBIAN_FRONTEND=noninteractive \
     apt-get install -y --no-install-recommends \
             easy-rsa \
