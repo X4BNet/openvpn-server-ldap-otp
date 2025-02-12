@@ -1,13 +1,15 @@
 if [ ! -f "$PKI_DIR/issued/$OVPN_SERVER_CN.crt" ] || [ "$REGENERATE_CERTS" == 'true' ]; then
 
  echo "easyrsa: creating server certs"
- EASYCMD="/usr/share/easy-rsa/3/easyrsa --vars=/opt/easyrsa/vars"
+ sed -i 's/^RANDFILE/#RANDFILE/g' /opt/easyrsa/openssl-easyrsa.cnf
+ EASYCMD="/opt/easyrsa/easyrsa"
+ . /opt/easyrsa/pki_vars
  $EASYCMD init-pki
 
  $EASYCMD build-ca nopass
 
  $EASYCMD gen-dh
- openvpn --genkey --secret $PKI_DIR/ta.key
+ openvpn --genkey secret $PKI_DIR/ta.key
 
  $EASYCMD build-server-full "$OVPN_SERVER_CN" nopass
 

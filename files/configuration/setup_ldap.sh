@@ -5,7 +5,7 @@ echo "ldap: creating LDAP configuration"
 cat <<EoLDAP >$LDAP_CONFIG
 
 uid nslcd
-gid ldap
+gid nslcd
 
 uri $LDAP_URI
 
@@ -30,7 +30,7 @@ if [ "${LDAP_TLS_CA_CERT}x" != "x" ] ; then
   echo "$LDAP_TLS_CA_CERT" > $OPENVPN_DIR/ldap-ca.crt
   echo "tls_cacertfile ${OPENVPN_DIR}/ldap-ca.crt" >> $LDAP_CONFIG
 else
-  echo "tls_cacertfile /etc/pki/tls/certs/ca-bundle.crt" >> $LDAP_CONFIG
+  echo "tls_cacertfile /etc/ssl/certs/ca-certificates.crt" >> $LDAP_CONFIG
 fi
 
 if [ "${ACTIVE_DIRECTORY_COMPAT_MODE}" == "true" ]; then
@@ -53,5 +53,9 @@ fi
 if [ "${LDAP_BIND_USER_DN}x" != "x" ] ; then
   echo "binddn $LDAP_BIND_USER_DN" >> $LDAP_CONFIG
   echo "bindpw $LDAP_BIND_USER_PASS" >> $LDAP_CONFIG
+fi
+
+if [ "${LDAP_DISABLE_BIND_SEARCH}" == "true" ] ; then
+  echo "pam_authc_search none" >> $LDAP_CONFIG
 fi
 

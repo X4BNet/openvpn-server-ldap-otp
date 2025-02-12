@@ -1,23 +1,32 @@
-FROM centos:7
+FROM ubuntu:23.04
 
 MAINTAINER Brian Lycett <brian@wheelybird.com>
 
+RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates wget curl gnupg && \
+    DEBIAN_FRONTEND=noninteractive \
+    apt-get install -y --no-install-recommends \
+            easy-rsa \
+            fail2ban \
+            ipcalc \
+            iptables \
+            libpam-google-authenticator \
+            libpam-ldapd \
+            net-tools \
+            nslcd \
+            openssl \
+            openvpn && \
+    apt-get autoremove && \
+    rm -rf /var/lib/apt/lists/* && \
+    mkdir /opt/easyrsa && \
+    cp -rp /usr/share/easy-rsa/x509-types /opt/easyrsa/ && \
+    cp -rp /usr/share/easy-rsa/easyrsa /opt/easyrsa/
+
+EXPOSE 1194/udp
+EXPOSE 5555/tcp
+
 ADD ./files/bin /usr/local/bin
+RUN chmod a+x /usr/local/bin/*
 ADD ./files/configuration /opt/configuration
-
-RUN yum -y install epel-release iptables bash nss-pam-ldapd ca-certificates net-tools wget openssl && \
-    wget http://ftp.tu-chemnitz.de/pub/linux/dag/redhat/el7/en/x86_64/rpmforge/RPMS/rpmforge-release-0.5.3-1.el7.rf.x86_64.rpm && yum -y install rpmforge-release-0.5.3-1.el7.rf.x86_64.rpm && \
-    yum -y install openvpn easy-rsa whatmask fail2ban google-authenticator ipcalc tcpdump strace && \
-    yum -y upgrade && \
-    mkdir /opt/easyrsa && cp -rp /usr/share/easy-rsa/3/{x509-types,easyrsa} /opt/easyrsa && \
-    chmod a+x /usr/local/bin/*er-rhscl-7-rpms && \
-    yum clean all && \
-    rm -rf /var/cache/yum
-
-EXPOSE 1194/udp 5555/tcp
-
-
-# Copy openvpn PAM modules (with and without OTP)
 ADD ./files/etc/pam.d/openvpn* /opt/
 ADD ./files/easyrsa/* /opt/easyrsa/
 
