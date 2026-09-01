@@ -69,7 +69,9 @@ Configuration is via environmental variables.  Here's a list, along with the def
 
  * `AUTH_CACHE_POSITIVE_TTL` (120): Seconds to retain a successful LDAP authentication result. The cache is keyed by an HMAC of the username and password, not by plaintext credentials.
  * `AUTH_CACHE_NEGATIVE_TTL` (30): Seconds to retain an LDAP rejection for the same username and password.
- * `AUTH_CACHE_STALE_TTL` (60): After either entry expires, return its stale result for this many seconds while one detached process refreshes it. LDAP transport and configuration errors are not written as negative cache entries.
+ * `AUTH_CACHE_POSITIVE_STALE_TTL` (600): After a successful entry expires, continue to accept it for this many seconds while a detached process refreshes it. This prevents a short LDAP outage from rejecting users who were recently verified.
+ * `AUTH_CACHE_NEGATIVE_STALE_TTL` (60): After a failed entry expires, retain the rejection for this many seconds while a detached process refreshes it.
+ * `AUTH_CACHE_STALE_TTL` (_deprecated_): If set, overrides both stale windows for compatibility with previous images.
  * `AUTH_CACHE_REFRESH_LOCK_TTL` (30): Maximum age of a refresh lock before another request may replace a failed background refresh.
  
  * `FAIL2BAN_ENABLED` (false):  Set to `true` to enable the fail2ban daemon (protection against brute force attacks). This will also set `LOG_TO_STDOUT` to `false`.

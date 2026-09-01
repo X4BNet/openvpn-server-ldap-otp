@@ -53,7 +53,8 @@ if [ "${LOG_TO_STDOUT}x" == "x" ];                then export LOG_TO_STDOUT="tru
 if [ "${ENABLE_OTP}x" == "x" ];                   then export ENABLE_OTP="false";                                   fi
 if [ "${AUTH_CACHE_POSITIVE_TTL}x" == "x" ];       then export AUTH_CACHE_POSITIVE_TTL="120";                         fi
 if [ "${AUTH_CACHE_NEGATIVE_TTL}x" == "x" ];       then export AUTH_CACHE_NEGATIVE_TTL="30";                          fi
-if [ "${AUTH_CACHE_STALE_TTL}x" == "x" ];          then export AUTH_CACHE_STALE_TTL="60";                             fi
+if [ "${AUTH_CACHE_POSITIVE_STALE_TTL}x" == "x" ]; then export AUTH_CACHE_POSITIVE_STALE_TTL="600";                    fi
+if [ "${AUTH_CACHE_NEGATIVE_STALE_TTL}x" == "x" ]; then export AUTH_CACHE_NEGATIVE_STALE_TTL="60";                     fi
 if [ "${AUTH_CACHE_REFRESH_LOCK_TTL}x" == "x" ];   then export AUTH_CACHE_REFRESH_LOCK_TTL="30";                      fi
 if [ "${LDAP_LOGIN_ATTRIBUTE}x" == "x" ];         then export LDAP_LOGIN_ATTRIBUTE="uid";                           fi
 if [ "${LDAP_ENCRYPT_CONNECTION}x" == "x" ];      then export LDAP_ENCRYPT_CONNECTION="off";                        fi
@@ -72,5 +73,4 @@ else
  LOG_FILE="${LOG_DIR}/openvpn.log"
  touch $LOG_FILE
 fi
-
 

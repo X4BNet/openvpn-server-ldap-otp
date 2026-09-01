@@ -1,0 +1,58 @@
+#!/usr/bin/python3
+
+"""Persist the settings required by the unprivileged OpenVPN auth hook."""
+
+import json
+import os
+from pathlib import Path
+import secrets
+import sys
+
+
+SETTINGS = (
+    "ENABLE_OTP",
+    "LDAP_URI",
+    "LDAP_BASE_DN",
+    "LDAP_BIND_USER_DN",
+    "LDAP_BIND_USER_PASS",
+    "LDAP_LOGIN_ATTRIBUTE",
+    "LDAP_FILTER",
+    "LDAP_ENCRYPT_CONNECTION",
+    "LDAP_TLS",
+    "LDAP_TLS_VALIDATE_CERT",
+    "ACTIVE_DIRECTORY_COMPAT_MODE",
+    "AUTH_CACHE_POSITIVE_TTL",
+    "AUTH_CACHE_NEGATIVE_TTL",
+    "AUTH_CACHE_POSITIVE_STALE_TTL",
+    "AUTH_CACHE_NEGATIVE_STALE_TTL",
+    "AUTH_CACHE_STALE_TTL",
+    "AUTH_CACHE_REFRESH_LOCK_TTL",
+)
+
+
+def main() -> int:
+    if len(sys.argv) != 2:
+        return 2
+
+    destination = Path(sys.argv[1])
+    values = {name: os.environ[name] for name in SETTINGS if name in os.environ}
+    temporary = destination.with_name(f".{destination.name}.{os.getpid()}.{secrets.token_hex(8)}.tmp")
+    try:
+        fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as output:
+            json.dump(values, output, separators=(",", ":"))
+            output.flush()
+            os.fsync(output.fileno())
+        os.replace(temporary, destination)
+        os.chmod(destination, 0o600)
+    except OSError:
+        try:
+            temporary.unlink()
+        except OSError:
+            pass
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

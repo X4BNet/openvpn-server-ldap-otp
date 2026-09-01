@@ -27,15 +27,36 @@ from ldap.filter import escape_filter_chars
 OTP_DIRECTORY = Path("/etc/openvpn/otp")
 CACHE_DIRECTORY = Path("/etc/openvpn/auth-cache")
 CACHE_KEY_FILE = Path("/etc/openvpn/auth-cache.key")
+AUTH_SETTINGS_FILE = Path("/etc/openvpn/auth-settings.json")
 OTP_CODE = re.compile(r"^[0-9]{6}$")
 
 
+def load_auth_settings() -> dict[str, str]:
+    """Read settings written by the entrypoint for the OpenVPN hook.
+
+    OpenVPN creates a restricted environment for script hooks. In particular,
+    it cannot be relied upon to preserve the LDAP settings inherited by the
+    daemon. The file is mode 0600 and readable only by the `nobody` account
+    which runs both OpenVPN and this verifier.
+    """
+    try:
+        values = json.loads(AUTH_SETTINGS_FILE.read_text(encoding="utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return {}
+    if not isinstance(values, dict):
+        return {}
+    return {name: value for name, value in values.items() if isinstance(name, str) and isinstance(value, str)}
+
+
+AUTH_SETTINGS = load_auth_settings()
+
+
 def option_is_true(name: str) -> bool:
-    return os.environ.get(name, "").lower() == "true"
+    return setting(name).lower() == "true"
 
 
 def setting(name: str, default: str = "") -> str:
-    return os.environ.get(name, default)
+    return AUTH_SETTINGS.get(name, os.environ.get(name, default))
 
 
 def cache_duration(name: str, default: int) -> int:
@@ -44,6 +65,21 @@ def cache_duration(name: str, default: int) -> int:
     except ValueError:
         return default
     return duration if duration >= 0 else default
+
+
+def cache_stale_duration(result: bool) -> int:
+    """Return the stale-while-refresh period for a cache result.
+
+    AUTH_CACHE_STALE_TTL is retained as an override for existing deployments.
+    Successful authentications get a longer default because they preserve VPN
+    availability while LDAP is briefly unavailable; failed authentications do
+    not need the same grace period.
+    """
+    default = 600 if result else 60
+    if "AUTH_CACHE_STALE_TTL" in AUTH_SETTINGS or "AUTH_CACHE_STALE_TTL" in os.environ:
+        return cache_duration("AUTH_CACHE_STALE_TTL", default)
+    name = "AUTH_CACHE_POSITIVE_STALE_TTL" if result else "AUTH_CACHE_NEGATIVE_STALE_TTL"
+    return cache_duration(name, default)
 
 
 def cache_secret() -> bytes | None:
@@ -90,7 +126,7 @@ def write_cache_entry(key: str, result: bool) -> None:
     entry = {
         "result": result,
         "expires_at": now + ttl,
-        "stale_until": now + ttl + cache_duration("AUTH_CACHE_STALE_TTL", 60),
+        "stale_until": now + ttl + cache_stale_duration(result),
     }
     temporary_path = CACHE_DIRECTORY / f".{key}.{os.getpid()}.{secrets.token_hex(8)}.tmp"
     try:
