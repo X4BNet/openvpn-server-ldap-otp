@@ -90,7 +90,8 @@ Part02
 if [ "${USE_CLIENT_CERTIFICATE}" != "true" ] ; then
 
 cat <<Part03 >>$CONFIG_FILE
-plugin $(dpkg-query -L openvpn | grep openvpn-plugin-auth-pam.so | head -n1) openvpn
+script-security 2
+auth-user-pass-verify /usr/local/bin/authenticate-user via-env
 verify-client-cert optional
 username-as-common-name
 

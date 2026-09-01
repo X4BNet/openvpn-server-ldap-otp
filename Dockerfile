@@ -2,19 +2,18 @@ FROM ubuntu:24.04
 
 MAINTAINER Brian Lycett <brian@wheelybird.com>
 
-RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates wget curl gnupg libnss-ldapd iproute2 tcpdump  && \
+RUN apt-get update && apt-get install -y --no-install-recommends wget ca-certificates wget curl gnupg iproute2 tcpdump  && \
     DEBIAN_FRONTEND=noninteractive \
     apt-get install -y --no-install-recommends \
             easy-rsa \
             fail2ban \
             ipcalc \
             iptables \
-            libpam-google-authenticator \
-            libpam-ldapd \
             net-tools \
-            nslcd \
             openssl \
-            openvpn && \
+            openvpn \
+            python3-ldap \
+            qrencode && \
     apt-get autoremove && \
     rm -rf /var/lib/apt/lists/* && \
     mkdir /opt/easyrsa && \
@@ -27,11 +26,9 @@ EXPOSE 5555/tcp
 ADD ./files/bin /usr/local/bin
 RUN chmod a+x /usr/local/bin/*
 ADD ./files/configuration /opt/configuration
-ADD ./files/etc/pam.d/openvpn* /opt/
 ADD ./files/easyrsa/* /opt/easyrsa/
 
 # Use a volume for data persistence
 VOLUME /etc/openvpn
 
 CMD ["/usr/local/bin/entrypoint"]
-

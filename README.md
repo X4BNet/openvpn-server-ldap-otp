@@ -1,6 +1,6 @@
 ## OpenVPN container
 
-This will create an OpenVPN server. You can either use LDAP for authentication (with optional 2FA provided by Google Auth) or create a client certificate.   
+This will create an OpenVPN server. You can either use direct LDAP authentication (with optional TOTP two-factor authentication) or create a client certificate. LDAP authentication is performed by OpenVPN's `auth-user-pass-verify` hook; the container does not use PAM.  
 The container will automatically generate the certificates on the first run (using a 2048 bit key) which means that *the initial run could take several minutes* whilst keys are generated.  The client configuration will be output in the logs.
 A volume is created for data persistence.
 
@@ -22,7 +22,7 @@ Configuration is via environmental variables.  Here's a list, along with the def
  * `LDAP_BASE_DN`: The base DN used for LDAP lookups. e.g. `dc=example,dc=org`.
 
 ---
-**Tip**: The LDAP authentication module authenticates the user by searching for their LDAP entry and if it can't return that record authentication fails.  Many LDAP servers don't allow anonymous binds/searches, so set `LDAP_BIND_USER_DN` (and `LDAP_BIND_USER_PASS`) as a user that has permission to search the directory.
+**Tip**: The authentication hook searches for the user's LDAP entry, then attempts an LDAP bind as that user. Authentication fails if either operation fails. Many LDAP servers do not allow anonymous searches, so set `LDAP_BIND_USER_DN` (and `LDAP_BIND_USER_PASS`) to an account permitted to search the directory.
 
 ---
 
@@ -34,12 +34,10 @@ Configuration is via environmental variables.  Here's a list, along with the def
  * `LDAP_BIND_USER_PASS` (_undefined_): The password for the bind user.
  * `LDAP_FILTER` (`(objectClass=posixAccount)`): A filter to apply to LDAP lookups.  This allows you to limit the lookup results and thereby who will be authenticated.  e.g. `(memberOf=cn=staff,cn=groups,cn=accounts,dc=example,dc=org)`.  See [LDAP authentication filters](#ldap_authentication_filters) for more information.
  * `LDAP_LOGIN_ATTRIBUTE` (uid):  The LDAP attribute used for the authentication lookup, i.e. which attribute is matched to the username when you log into the OpenVPN server.
- * `LDAP_ENCRYPT_CONNECTION` (off): Options:  `on|starttls|off`. This sets the 'ssl' option in nslcd.  `on` will connect to the LDAP server over TLS (SSL).  `starttls` will initially connect unencrypted and negotiate a TLS connection if one is available.  `off` will disable SSL/TLS.
+ * `LDAP_ENCRYPT_CONNECTION` (off): Options:  `on|starttls|off`. `on` connects with LDAPS and requires `LDAP_URI` to start with `ldaps://`. `starttls` upgrades an LDAP connection with StartTLS. `off` disables LDAP transport encryption.
  * `LDAP_TLS` (false):  Changes (overrides) `LDAP_ENCRYPT_CONNECTION` to `starttls` (this setting is for backwards-compatibility with previous versions).
  * `LDAP_TLS_VALIDATE_CERT` (true):  Set to 'true' to ensure the TLS certificate can be validated.  'false' will ignore certificate issues - you might need this if you're using a self-signed certificate and not passing in the CA certificate.
  * `LDAP_TLS_CA_CERT` (_undefined_): The contents of the CA certificate file for the LDAP server.  You'll need this to enable TLS when using self-signed certificates.
- * `LDAP_DISABLE_BIND_SEARCH` (false): Set to 'true' to stop nslcd searching for the user using their own credentials on login. By default nslcd does this as an extra verification step but some LDAP implementations disable searches for unprivileged users by default. Note that you should ensure your LDAP server handles invalid credentials properly before enabling this.
-
  * `ACTIVE_DIRECTORY_COMPAT_MODE` (false): Sets `LDAP_LOGIN_ATTRIBUTE` to `sAMAccountName` and `LDAP_FILTER` to `(objectClass=user)`, which allows LDAP lookups to work with Active Directory.  This will override any value you've manually set for those settings.
 
  * `OVPN_TLS_CIPHERS` (TLS-ECDHE-ECDSA-WITH-CHACHA20-POLY1305-SHA256:TLS-ECDHE-RSA-WITH-CHACHA20-POLY1305-SHA256:TLS-ECDHE-ECDSA-WITH-AES-128-GCM-SHA256:TLS-ECDHE-RSA-WITH-AES-128-GCM-SHA256): Determines which ciphers will be set for `tls-cipher` in the openvpn config file.
@@ -67,7 +65,12 @@ Configuration is via environmental variables.  Here's a list, along with the def
  * `KEY_LENGTH` (2048):  The length of the server key in bits.  Higher is more secure, but will take longer to generate.  e.g. `4096`
  * `DEBUG` (false):  Add debugging information to the logs.
  * `LOG_TO_STDOUT` (true):  Sends *OpenVPN* logs directly to stdout.  If this is set to `false` then the logs are written to `/etc/openvpn/logs/openvpn.log` first, although this file is tailed to stdout once OpenVPN has started.  If `FAIL2BAN_ENABLED` is `true` then this is set to `false` because *fail2ban* needs to be able to parse the *OpenVPN* logs. 
- * `ENABLE_OTP` (false):  Activate two factor authentication using Google Auth.  See [Using OTP](#using_otp) for more information.
+ * `ENABLE_OTP` (false):  Activate TOTP two-factor authentication. See [Using OTP](#using_otp) for more information.
+
+ * `AUTH_CACHE_POSITIVE_TTL` (120): Seconds to retain a successful LDAP authentication result. The cache is keyed by an HMAC of the username and password, not by plaintext credentials.
+ * `AUTH_CACHE_NEGATIVE_TTL` (30): Seconds to retain an LDAP rejection for the same username and password.
+ * `AUTH_CACHE_STALE_TTL` (60): After either entry expires, return its stale result for this many seconds while one detached process refreshes it. LDAP transport and configuration errors are not written as negative cache entries.
+ * `AUTH_CACHE_REFRESH_LOCK_TTL` (30): Maximum age of a refresh lock before another request may replace a failed background refresh.
  
  * `FAIL2BAN_ENABLED` (false):  Set to `true` to enable the fail2ban daemon (protection against brute force attacks). This will also set `LOG_TO_STDOUT` to `false`.
  * `FAIL2BAN_MAXRETRIES` (3):  The number of attempts that fail2ban allows before banning an ip address.
@@ -99,11 +102,10 @@ docker run \
 
 ## Using OTP
 
-If you set `ENABLE_OTP=true` then OpenVPN will be configured to use two-factor authentication: you'll need your LDAP password and a passcode in order to connect.  The passcode is provided by the Google Authenticator app.  You'll need to download that from your app store.   
+If you set `ENABLE_OTP=true` then OpenVPN will be configured to use two-factor authentication: you'll need your LDAP password and a passcode in order to connect. The passcode is provided by a TOTP-compatible authenticator such as Google Authenticator.  
 You need to set up each user with 2FA.  To do this you need to log into the host that's running the OpenVPN container and run   
-`docker exec -ti openvpn add-otp-user <username>` where `username` matches the LDAP username.   
-Give the generated URL and emergency codes to the user.  To log in the user must append the code generated by Google Authenticator to their password.  So if their password is `verysecurepassword` and the Authenticator code is `934567` then they need to enter `verysecurepassword934567` at the password prompt.   
-The server-side OTP configuration is stored under /etc/openvpn, so ensure that's mounted as a volume otherwise the configuration will be lost when the container is restarted.   
+`docker exec -ti openvpn add-otp-user <username>` where `username` matches the LDAP username. The command displays the seed, provisioning URI, and a terminal QR code. To log in the user must append the current six-digit code to their password. So if their password is `verysecurepassword` and the authenticator code is `934567`, they enter `verysecurepassword934567` at the password prompt.   
+The server-side OTP seeds are stored under `/etc/openvpn`, so ensure that path is mounted as a volume. Existing Google Authenticator seed files remain compatible because the verifier reads their first-line Base32 seed.  
 Note:  OTP will only work with LDAP and can't be enabled if you're using the client certificate.
 
 ## Using a client certificate
@@ -125,5 +127,4 @@ The OpenVPN server is configured to send a keepalive ping every ten seconds and 
 
 ## LDAP authentication filters
 
-You can restrict who can log into the VPN via LDAP filters.  This container uses the `libpam-ldapd` and [nslcd](http://manpages.ubuntu.com/manpages/focal/man5/nslcd.conf.5.html) packages to authenticate against LDAP.  The value of `LDAP_FILTER` will be appended to the user lookup.  So if `LDAP_FILTER` is `memberOf=cn=staff,cn=groups,cn=accounts,dc=example,dc=org` then the filter that `nslcd` will generate is `(&(uid=username)(memberOf=cn=staff,cn=groups,cn=accounts,dc=example,dc=org))`.
-`nslcd` defaults to `(objectClass=posixAccount)`, which will therefore create a filter like `(&(uid=username)(objectClass=posixAccount))` if `LDAP_FILTER` is undefined.
+You can restrict who can log into the VPN via LDAP filters. The direct LDAP hook combines `LDAP_FILTER` with the login lookup. For example, `LDAP_FILTER=(memberOf=cn=staff,cn=groups,cn=accounts,dc=example,dc=org)` produces `(&(uid=username)(memberOf=cn=staff,cn=groups,cn=accounts,dc=example,dc=org))`. If `LDAP_FILTER` is undefined, it defaults to `(objectClass=posixAccount)`.

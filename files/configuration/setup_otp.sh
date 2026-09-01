@@ -1,8 +1,9 @@
-#Set up PAM for openvpn - with OTP if it's set as enabled
+# The OpenVPN process drops to nobody before it runs the direct
+# authentication hook.  Keep TOTP seeds readable only by that account.
 if [ "$ENABLE_OTP" == "true" ]; then
-  echo "pam: enabling LDAP & OTP"
-  cp -f /opt/openvpn.with-otp /etc/pam.d/openvpn
+  echo "otp: preparing local TOTP state"
+  install -d -o nobody -g nogroup -m 0700 /etc/openvpn/otp
+  find /etc/openvpn/otp -maxdepth 1 -type f -name '*.google_authenticator' -exec chown nobody:nogroup {} \; -exec chmod 0600 {} \;
 else
-  echo "pam: enabling LDAP"
-  cp -f /opt/openvpn.without-otp /etc/pam.d/openvpn
+  echo "otp: disabled"
 fi

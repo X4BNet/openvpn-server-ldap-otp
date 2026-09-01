@@ -1,26 +1,53 @@
-#!/bin/bash
+#!/usr/bin/python3
 
-#
-# Generate OpenVPN users via google authenticator
-#
+"""Create a TOTP seed consumed by authenticate-user without PAM."""
 
-if [ -z $1 ]; then
-    echo "Usage: add_otp_user USERNAME"
-    exit 1
-fi
+import base64
+import os
+from pathlib import Path
+import pwd
+import secrets
+import shutil
+import subprocess
+import sys
+from urllib.parse import quote
 
 
-# Ensure the otp folder is present
-[ -d /etc/openvpn/otp ] || mkdir -p /etc/openvpn/otp
+if len(sys.argv) != 2 or not sys.argv[1] or "/" in sys.argv[1] or "\x00" in sys.argv[1]:
+    print("Usage: add-otp-user USERNAME", file=sys.stderr)
+    sys.exit(1)
 
-google-authenticator \
-                     --time-based \
-                     --disallow-reuse \
-                     --force \
-                     --no-confirm \
-                     --rate-limit=3 \
-                     --rate-time=30 \
-                     --window-size=3 \
-                     -l "${1}@${OVPN_SERVER_CN}" \
-                     -s /etc/openvpn/otp/${1}.google_authenticator
+username = sys.argv[1]
+issuer = os.environ.get("OVPN_SERVER_CN", "OpenVPN")
+otp_dir = Path("/etc/openvpn/otp")
+otp_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
 
+nobody = pwd.getpwnam("nobody")
+try:
+    os.chown(otp_dir, nobody.pw_uid, nobody.pw_gid)
+    os.chmod(otp_dir, 0o700)
+except PermissionError:
+    pass
+
+secret = base64.b32encode(secrets.token_bytes(20)).decode("ascii").rstrip("=")
+seed_path = otp_dir / f"{username}.google_authenticator"
+temporary_path = otp_dir / f".{username}.{secrets.token_hex(8)}.tmp"
+
+try:
+    fd = os.open(temporary_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(fd, "w", encoding="ascii") as seed_file:
+        seed_file.write(f"{secret}\n")
+    os.chown(temporary_path, nobody.pw_uid, nobody.pw_gid)
+    os.replace(temporary_path, seed_path)
+except Exception:
+    temporary_path.unlink(missing_ok=True)
+    raise
+
+label = f"{issuer}:{username}"
+uri = f"otpauth://totp/{quote(label)}?secret={secret}&issuer={quote(issuer)}&digits=6&period=30"
+
+print(f"TOTP secret for {username}: {secret}")
+print(f"Provisioning URI: {uri}")
+qrencode = shutil.which("qrencode")
+if qrencode:
+    subprocess.run([qrencode, "-t", "ANSIUTF8", uri], check=False)
