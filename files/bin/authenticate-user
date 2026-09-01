@@ -218,8 +218,10 @@ def configure_tls() -> str:
         ldap.set_option(ldap.OPT_X_TLS_REQUIRE_CERT, ldap.OPT_X_TLS_NEVER)
 
     custom_ca = Path("/etc/openvpn/ldap-ca.crt")
-    if custom_ca.is_file():
-        ldap.set_option(ldap.OPT_X_TLS_CACERTFILE, str(custom_ca))
+    ca_bundle = custom_ca if custom_ca.is_file() else Path("/etc/ssl/certs/ca-certificates.crt")
+    if not ca_bundle.is_file():
+        raise OSError("LDAP CA bundle is unavailable")
+    ldap.set_option(ldap.OPT_X_TLS_CACERTFILE, str(ca_bundle))
     ldap.set_option(ldap.OPT_X_TLS_NEWCTX, 0)
     return encryption
 
