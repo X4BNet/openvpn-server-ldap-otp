@@ -90,7 +90,8 @@ Part02
 if [ "${USE_CLIENT_CERTIFICATE}" != "true" ] ; then
 
 cat <<Part03 >>$CONFIG_FILE
-script-security 2
+# `via-env` only exposes the client password to the verifier at level 3.
+script-security 3
 auth-user-pass-verify /usr/local/bin/authenticate-user via-env
 verify-client-cert optional
 username-as-common-name
